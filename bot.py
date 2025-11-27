@@ -8,13 +8,13 @@ from telegram.ext import (
 )
 
 # ---------- CONFIG ----------
-BOT_TOKEN = "7688080597:AAGdZu38mxpqbBH3fWx_c3hspdPwjiiZKug"   # अपना असली Token डालें
+BOT_TOKEN = "7688080597:AAGdZu38mxpqbBH3fWx_c3hspdPwjiiZKug"   # यहाँ अपना असली Bot Token डालें
 
 
+# ---------- MAURYAN EMPIRE QUESTIONS ----------
 # -*- coding: utf-8 -*-
-# Mauryan Empire MCQ Quiz in Hindi
 
-questions = [
+QUESTIONS = [
     {
         "question": "1. मौर्य साम्राज्य की स्थापना किसने की?",
         "options": [
@@ -312,7 +312,6 @@ async def send_question(update: Update, context: ContextTypes.DEFAULT_TYPE, q_in
     ]
 
     markup = InlineKeyboardMarkup(buttons)
-
     text = f"Q{q_index + 1}: {question_data['question']}"
 
     if update.callback_query:
@@ -328,7 +327,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
         "नमस्ते! 👋\nमैं MCQ Quiz Bot हूँ.\n"
-        "हर सवाल के सही विकल्प पर क्लिक करें।\nचलते हैं शुरू करते हैं!"
+        "हर सवाल के सही विकल्प पर क्लिक करें।\nचलो, शुरू करते हैं!"
     )
 
     await send_question(update, context, 0)
@@ -343,28 +342,33 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q_index = context.user_data.get("q_index", 0)
 
     question = QUESTIONS[q_index]
-    correct = question["correct_index"]
 
-    # सही/गलत चेक करें
-    if selected == correct:
-        context.user_data["score"] += 1
+    # 'A'/'B'/'C'/'D' को index (0–3) में बदलना
+    correct_letter = question["correct"]
+    correct_index = ord(correct_letter) - ord("A")
+
+    # सही/गलत चेक
+    if selected == correct_index:
+        context.user_data["score"] = context.user_data.get("score", 0) + 1
         feedback = "✅ सही जवाब!"
     else:
-        feedback = f"❌ गलत.\nसही जवाब: {question['options'][correct]}"
+        feedback = (
+            f"❌ गलत.\nसही जवाब: {question['options'][correct_index]}"
+        )
 
     await query.message.reply_text(feedback)
 
-    # व्याख्या भी भेजें
+    # व्याख्या
     explanation = question.get("explanation")
     if explanation:
         await query.message.reply_text(f"ℹ️ व्याख्या:\n{explanation}")
 
-    # अगला प्रश्न
+    # अगला सवाल या समाप्त
     next_q = q_index + 1
     if next_q < len(QUESTIONS):
         await send_question(update, context, next_q)
     else:
-        score = context.user_data["score"]
+        score = context.user_data.get("score", 0)
         total = len(QUESTIONS)
 
         await query.message.reply_text(
@@ -386,5 +390,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
