@@ -8,7 +8,7 @@ from telegram.ext import (
 )
 
 # ---------- CONFIG ----------
-BOT_TOKEN = "XYZ"   # yahan apna asli token daalna hai
+BOT_TOKEN = "7688080597:AAGdZu38mxpqbBH3fWx_c3hspdPwjiiZKug"   # yahan apna asli token daalna hai
 
 QUESTIONS = [
     {
@@ -130,3 +130,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
