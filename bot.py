@@ -295,7 +295,6 @@ QUESTIONS = [
     },
 ]
 
-
 # ---------- LOGGING ----------
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -408,7 +407,15 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # अगला question या finish
     next_q = q_index + 1
     if next_q < len(QUESTIONS):
-        await send_question(update, context, next_q)
+        # अगला सवाल भेजो
+        class FakeUpdate:
+            # सिर्फ send_question के लिए simple wrapper
+            def __init__(self, message):
+                self.message = message
+                self.callback_query = None
+
+        fake_update = FakeUpdate(query.message)
+        await send_question(fake_update, context, next_q)
     else:
         score = context.user_data.get("score", 0)
         total = len(QUESTIONS)
@@ -460,8 +467,7 @@ async def daily_quiz_job(context: ContextTypes.DEFAULT_TYPE):
     job_data = context.job.data
     chat_id = job_data["chat_id"]
 
-    # simple: हमेशा पहला सवाल या random भी कर सकते हैं
-    question_index = 0
+    question_index = 0  # अभी simple: पहला सवाल
     question = QUESTIONS[question_index]
 
     buttons = [
@@ -489,11 +495,11 @@ async def daily_on(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for job in context.job_queue.get_jobs_by_name(f"daily-{chat_id}"):
         job.schedule_removal()
 
-    # रोज़ 24 घंटे पर दोहराने वाला job (अभी जिस समय चालू करोगे वही base रहेगा)
+    # रोज़ 24 घंटे पर दोहराने वाला job
     context.job_queue.run_repeating(
         daily_quiz_job,
         interval=timedelta(days=1),
-        first=5,  # 5 sec बाद पहला सवाल
+        first=5,  # अभी 5 sec बाद पहला सवाल
         name=f"daily-{chat_id}",
         data={"chat_id": chat_id},
     )
@@ -518,7 +524,7 @@ async def daily_off(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("इस चैट के लिए कोई daily quiz सेट नहीं था।")
 
 
-# ---------- MAIN ----------
+# ---------- MAIN (POLLING) ----------
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
@@ -530,6 +536,7 @@ def main():
 
     app.add_handler(CallbackQueryHandler(handle_answer, pattern=r"^answer_"))
 
+    # IMPORTANT: ये pure polling है, कोई webhook/port नहीं
     app.run_polling()
 
 
