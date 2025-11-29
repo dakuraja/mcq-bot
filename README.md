@@ -1,2 +1,0 @@
-# mcq-bot
-telegram bot 
