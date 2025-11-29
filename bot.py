@@ -1,3 +1,4 @@
+import os
 import logging
 from datetime import timedelta
 
@@ -14,7 +15,12 @@ from telegram.ext import (
 )
 
 # ---------- CONFIG ----------
-BOT_TOKEN = "7688080597:AAGdZu38mxpqbBH3fWx_c3hspdPwjiiZKug"   # यहां अपना असली BotFather वाला token डालें
+# IMPORTANT: Token yahan hardcode nahi karna
+BOT_TOKEN = os.getenv("7688080597:AAGdZu38mxpqbBH3fWx_c3hspdPwjiiZKug")   # Railway me env variable set karoge
+
+if not BOT_TOKEN:
+    raise RuntimeError("BOT_TOKEN environment variable not set!")
+
 
 # ---------- QUESTIONS (Mauryan Empire) ----------
 QUESTIONS = [
@@ -295,6 +301,7 @@ QUESTIONS = [
     },
 ]
 
+
 # ---------- LOGGING ----------
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -354,12 +361,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ---------- QUIZ START ( /quiz ) ----------
 async def quiz_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # admin check (group में)
     if not await is_admin(update, context):
         await update.message.reply_text("केवल *admin* /quiz चला सकता है।", parse_mode="Markdown")
         return
 
-    # user का अपना score reset
     context.user_data["score"] = 0
     context.user_data["q_index"] = 0
 
@@ -381,16 +386,13 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     question = QUESTIONS[q_index]
 
-    # correct letter -> index
     letters = ["A", "B", "C", "D"]
     correct_letter = question["correct"].upper().strip()
     try:
         correct_index = letters.index(correct_letter)
     except ValueError:
-        # अगर गलती से wrong data हो
         correct_index = 0
 
-    # सही/गलत चेक
     if selected == correct_index:
         context.user_data["score"] = context.user_data.get("score", 0) + 1
         feedback = "✅ सही जवाब!"
@@ -399,28 +401,18 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await query.message.reply_text(feedback)
 
-    # explanation
     explanation = question.get("explanation")
     if explanation:
         await query.message.reply_text(f"ℹ️ व्याख्या:\n{explanation}")
 
-    # अगला question या finish
     next_q = q_index + 1
     if next_q < len(QUESTIONS):
-        # अगला सवाल भेजो
-        class FakeUpdate:
-            # सिर्फ send_question के लिए simple wrapper
-            def __init__(self, message):
-                self.message = message
-                self.callback_query = None
-
-        fake_update = FakeUpdate(query.message)
-        await send_question(fake_update, context, next_q)
+        # yahi update object dobara pass kar sakte hain
+        await send_question(update, context, next_q)
     else:
         score = context.user_data.get("score", 0)
         total = len(QUESTIONS)
 
-        # LEADERBOARD update
         app_data = context.application.bot_data.setdefault("leaderboard", {})
         chat_id = update.effective_chat.id
         chat_board = app_data.setdefault(chat_id, {})
@@ -450,7 +442,6 @@ async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("अभी तक किसी ने क्विज़ पूरा नहीं किया। 🙂")
         return
 
-    # high to low sort
     sorted_scores = sorted(
         chat_board.items(), key=lambda x: x[1]["score"], reverse=True
     )
@@ -467,7 +458,7 @@ async def daily_quiz_job(context: ContextTypes.DEFAULT_TYPE):
     job_data = context.job.data
     chat_id = job_data["chat_id"]
 
-    question_index = 0  # अभी simple: पहला सवाल
+    question_index = 0
     question = QUESTIONS[question_index]
 
     buttons = [
@@ -491,15 +482,13 @@ async def daily_on(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     chat_id = update.effective_chat.id
 
-    # पहले से job हो तो हटाओ
     for job in context.job_queue.get_jobs_by_name(f"daily-{chat_id}"):
         job.schedule_removal()
 
-    # रोज़ 24 घंटे पर दोहराने वाला job
     context.job_queue.run_repeating(
         daily_quiz_job,
         interval=timedelta(days=1),
-        first=5,  # अभी 5 sec बाद पहला सवाल
+        first=5,
         name=f"daily-{chat_id}",
         data={"chat_id": chat_id},
     )
@@ -536,7 +525,6 @@ def main():
 
     app.add_handler(CallbackQueryHandler(handle_answer, pattern=r"^answer_"))
 
-    # IMPORTANT: ये pure polling है, कोई webhook/port नहीं
     app.run_polling()
 
 
