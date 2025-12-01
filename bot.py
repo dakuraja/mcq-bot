@@ -1,475 +1,537 @@
-import os
-import time
-import requests
 import logging
-import random
+from datetime import timedelta
 
-from flask import Flask, request
+from telegram import (
+    Update,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+)
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    CallbackQueryHandler,
+    ContextTypes,
+)
 
-# ---------------- CONFIG ----------------
-BOT_TOKEN = os.environ["BOT_TOKEN"]
-API_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
+# ---------- CONFIG ----------
+BOT_TOKEN = "xxxx"   # यहां अपना असली BotFather वाला token डालें
 
-QUESTION_TIME = 45
-
-# Negative marking rules
-MARK_CORRECT = 1.0
-MARK_WRONG = -0.33
-
-logging.basicConfig(level=logging.INFO)
-log = logging.getLogger("BOT")
-
-# ---------------- QUESTIONS ----------------
+# ---------- QUESTIONS (Mauryan Empire) ----------
 QUESTIONS = [
     {
         "question": "1. मौर्य साम्राज्य की स्थापना किसने की?",
-        "options": ["A) बिन्दुसार", "B) चंद्रगुप्त मौर्य", "C) अशोक", "D) पुष्यमित्र शुंग"],
-        "correct": 1,
-        "explanation": "चंद्रगुप्त मौर्य ने 322 ई.पू. में मौर्य साम्राज्य की स्थापना की।"
+        "options": [
+            "A) बिन्दुसार",
+            "B) चंद्रगुप्त मौर्य",
+            "C) अशोक",
+            "D) पुष्यमित्र शुंग",
+        ],
+        "correct": "B",
+        "explanation": "चंद्रगुप्त मौर्य ने 322 ई.पू. में मौर्य साम्राज्य की स्थापना की।",
+    },
+    {
+        "question": "2. चंद्रगुप्त मौर्य का गुरु कौन था?",
+        "options": [
+            "A) विष्णुगुप्त",
+            "B) चाणक्य",
+            "C) पतंजलि",
+            "D) मेगस्थनीज़",
+        ],
+        "correct": "B",
+        "explanation": "चाणक्य ही कौटिल्य/विष्णुगुप्त हैं, जिन्होंने चंद्रगुप्त को साम्राज्य स्थापित करने में मदद की।",
+    },
+    {
+        "question": "3. मौर्य साम्राज्य की राजधानी थी—",
+        "options": [
+            "A) उज्जैन",
+            "B) तक्षशिला",
+            "C) पाटलिपुत्र",
+            "D) कौशाम्बी",
+        ],
+        "correct": "C",
+        "explanation": "पाटलिपुत्र (आधुनिक पटना) मौर्य साम्राज्य की राजधानी थी।",
+    },
+    {
+        "question": "4. मेगस्थनीज़ किसके दरबार में आया?",
+        "options": [
+            "A) अशोक",
+            "B) बिन्दुसार",
+            "C) चंद्रगुप्त मौर्य",
+            "D) बृहद्रथ",
+        ],
+        "correct": "C",
+        "explanation": "मेगस्थनीज़ सेल्यूकस निकेटर का दूत था और चंद्रगुप्त मौर्य के दरबार में आया।",
+    },
+    {
+        "question": "5. मेगस्थनीज़ की पुस्तक का नाम है—",
+        "options": [
+            "A) मिलिंदपन्हो",
+            "B) इंडिका",
+            "C) कथावत्थु",
+            "D) मुद्राराक्षस",
+        ],
+        "correct": "B",
+        "explanation": "इंडिका में भारत के समाज, प्रशासन और जीवन का विवरण है।",
+    },
+    {
+        "question": "6. चंद्रगुप्त मौर्य ने किस यूनानी शासक को पराजित किया?",
+        "options": [
+            "A) एंटियोकस",
+            "B) सेल्यूकस निकेटर",
+            "C) डेमेट्रियस",
+            "D) मिनेंडर",
+        ],
+        "correct": "B",
+        "explanation": "चंद्रगुप्त ने सेल्यूकस निकेटर को हराकर उसके साथ संधि की और कई प्रदेश प्राप्त किए।",
+    },
+    {
+        "question": "7. अशोक ने किस युद्ध के बाद बौद्ध धर्म अपनाया?",
+        "options": [
+            "A) पाटलिपुत्र युद्ध",
+            "B) राजगृह युद्ध",
+            "C) कौशांबी युद्ध",
+            "D) कलिंग युद्ध",
+        ],
+        "correct": "D",
+        "explanation": "कलिंग युद्ध की भीषण हानि देखकर अशोक हिंसा से विरक्त हुआ और बौद्ध धर्म अपना लिया।",
+    },
+    {
+        "question": "8. कलिंग युद्ध कब हुआ?",
+        "options": [
+            "A) 321 ई.पू.",
+            "B) 273 ई.पू.",
+            "C) 261 ई.पू.",
+            "D) 185 ई.पू.",
+        ],
+        "correct": "C",
+        "explanation": "कलिंग युद्ध 261 ई.पू. में हुआ, यह मौर्य इतिहास की प्रमुख घटना है।",
+    },
+    {
+        "question": "9. अशोक ने किस बौद्ध परिषद का आयोजन करवाया?",
+        "options": [
+            "A) प्रथम",
+            "B) द्वितीय",
+            "C) तृतीय",
+            "D) चतुर्थ",
+        ],
+        "correct": "C",
+        "explanation": "अशोक ने तृतीय बौद्ध परिषद पाटलिपुत्र में आयोजित करवाई।",
+    },
+    {
+        "question": "10. तृतीय बौद्ध परिषद का अध्यक्ष था—",
+        "options": [
+            "A) वसुमित्र",
+            "B) नागसेन",
+            "C) मोग्गलिपुत्त तिस्स",
+            "D) उपगुप्त",
+        ],
+        "correct": "C",
+        "explanation": "तृतीय बौद्ध परिषद की अध्यक्षता मोग्गलिपुत्त तिस्स ने की।",
+    },
+    {
+        "question": "11. अशोक के अधिकांश शिलालेख किस लिपि में हैं?",
+        "options": [
+            "A) देवनागरी",
+            "B) ब्राह्मी",
+            "C) खरोष्ठी",
+            "D) अरेमाइक",
+        ],
+        "correct": "B",
+        "explanation": "अशोक के अधिकतर शिलालेख ब्राह्मी लिपि में हैं, उत्तर-पश्चिम में खरोष्ठी भी।",
+    },
+    {
+        "question": "12. अशोक के शिलालेखों की भाषा मुख्यतः—",
+        "options": [
+            "A) संस्कृत",
+            "B) पाली",
+            "C) प्राकृत",
+            "D) तिब्बती",
+        ],
+        "correct": "C",
+        "explanation": "अधिकांश अभिलेख साधारण लोगों की समझ के लिए प्राकृत भाषा में लिखे गए।",
+    },
+    {
+        "question": "13. अशोक के आध्यात्मिक गुरु थे—",
+        "options": [
+            "A) उपगुप्त",
+            "B) नागार्जुन",
+            "C) आनंद",
+            "D) असंग",
+        ],
+        "correct": "A",
+        "explanation": "परंपरा के अनुसार उपगुप्त को अशोक का आध्यात्मिक गुरु माना जाता है।",
+    },
+    {
+        "question": "14. मौर्य प्रशासन में \"अमत्य\" का अर्थ है—",
+        "options": [
+            "A) सैनिक",
+            "B) जासूस",
+            "C) मंत्री/अधिकारी",
+            "D) कर संग्राहक",
+        ],
+        "correct": "C",
+        "explanation": "अमत्य उच्च प्रशासनिक अधिकारी या मंत्री थे, जो शासन कार्य में सहायक थे।",
+    },
+    {
+        "question": "15. “धम्म” का प्रचार किस मौर्य शासक ने किया?",
+        "options": [
+            "A) बिन्दुसार",
+            "B) अशोक",
+            "C) दशरथ",
+            "D) कुनाल",
+        ],
+        "correct": "B",
+        "explanation": "अशोक ने \"धम्म\" नीति के माध्यम से नैतिक जीवन, सहिष्णुता और अहिंसा का प्रचार किया।",
+    },
+    {
+        "question": "16. मौर्य काल में \"संघ\" का अर्थ है—",
+        "options": [
+            "A) प्रशासनिक विभाग",
+            "B) किसान संघ",
+            "C) व्यापार संगठन",
+            "D) बौद्ध भिक्षुओं का संगठन",
+        ],
+        "correct": "D",
+        "explanation": "संघ से आशय बौद्ध भिक्षुओं के संगठित समुदाय से था।",
+    },
+    {
+        "question": "17. मौर्य काल में प्रमुख कर कौन सा था?",
+        "options": [
+            "A) व्यापार कर",
+            "B) मनोरंजन कर",
+            "C) भू-कर",
+            "D) वन कर",
+        ],
+        "correct": "C",
+        "explanation": "कृषि आधारित अर्थव्यवस्था होने के कारण भूमि कर ही मुख्य राजस्व स्रोत था।",
+    },
+    {
+        "question": "18. अर्थशास्त्र का लेखक कौन है?",
+        "options": [
+            "A) विष्णु शर्मा",
+            "B) कालिदास",
+            "C) चाणक्य",
+            "D) पाणिनि",
+        ],
+        "correct": "C",
+        "explanation": "कौटिल्य/चाणक्य द्वारा रचित अर्थशास्त्र मौर्य प्रशासन का मुख्य ग्रंथ है।",
+    },
+    {
+        "question": "19. किसे अशोक ने श्रीलंका भेजा?",
+        "options": [
+            "A) फाह्यान",
+            "B) ह्वेनसांग",
+            "C) महेंद्र व संघमित्रा",
+            "D) नागार्जुन",
+        ],
+        "correct": "C",
+        "explanation": "अशोक ने अपने पुत्र महेंद्र और पुत्री संघमित्रा को बौद्ध धर्म प्रचार हेतु श्रीलंका भेजा।",
+    },
+    {
+        "question": "20. मौर्य काल का \"धनक\" किससे संबंधित था?",
+        "options": [
+            "A) कृषि",
+            "B) धातु कार्य",
+            "C) व्यापार",
+            "D) चिकित्सा",
+        ],
+        "correct": "B",
+        "explanation": "धनक शब्द का प्रयोग लोहार/धातु कार्य से जुड़े वर्ग के लिए होता था।",
+    },
+    {
+        "question": "21. अशोक के शिलालेखों को सबसे पहले किसने पढ़ा?",
+        "options": [
+            "A) कनिंघम",
+            "B) जेम्स प्रिंसेप",
+            "C) स्मिथ",
+            "D) मार्शल",
+        ],
+        "correct": "B",
+        "explanation": "जेम्स प्रिंसेप ने 1837 ई. में ब्राह्मी लिपि को सफलतापूर्वक पढ़ा।",
+    },
+    {
+        "question": "22. मौर्य साम्राज्य में भूमि मापने वाला अधिकारी—",
+        "options": [
+            "A) लिपिक",
+            "B) नगरिक",
+            "C) संधिविग्रहक",
+            "D) कोषाध्यक्ष",
+        ],
+        "correct": "A",
+        "explanation": "लिपिक भूमि मापन, लेखा व अभिलेख का कार्य करता था।",
+    },
+    {
+        "question": "23. अशोक के अभिलेखों में “राजुक” कौन था?",
+        "options": [
+            "A) न्यायधीश",
+            "B) मंत्री",
+            "C) जिला अधिकारी",
+            "D) दंडाधिकारी",
+        ],
+        "correct": "C",
+        "explanation": "राजुक आधुनिक अर्थों में जिला अधिकारी जैसा पद था जो प्रशासन व न्याय दोनों देखता था।",
+    },
+    {
+        "question": "24. मौर्य साम्राज्य का अंतिम शासक था—",
+        "options": [
+            "A) दशरथ",
+            "B) कुणाल",
+            "C) बृहद्रथ",
+            "D) बिन्दुसार",
+        ],
+        "correct": "C",
+        "explanation": "बृहद्रथ मौर्य अंतिम शासक था, जिसकी हत्या पुष्यमित्र शुंग ने की।",
+    },
+    {
+        "question": "25. मौर्य काल के सिक्के मुख्यतः किस धातु के थे?",
+        "options": [
+            "A) सोना",
+            "B) तांबा",
+            "C) चाँदी",
+            "D) लोहा",
+        ],
+        "correct": "C",
+        "explanation": "मौर्य काल के पंच-चिह्नित (Punch-marked) सिक्के प्रायः चाँदी के होते थे।",
     },
 ]
 
-# ---------------- GLOBAL STATE ----------------
-group_state = {}
-leaderboard = {}
+
+# ---------- LOGGING ----------
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO,
+)
+logger = logging.getLogger(__name__)
 
 
-# ---------------- BASIC TELEGRAM FUNCTIONS ----------------
-def api_call(method, params=None):
-    try:
-        r = requests.get(f"{API_URL}/{method}", params=params, timeout=15)
-        return r.json()
-    except Exception as e:
-        log.error("API error: %s", e)
-        return None
+# ---------- HELPER: ADMIN CHECK ----------
+async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    chat = update.effective_chat
+    user = update.effective_user
 
-
-def send_msg(chat_id, text, reply_markup=None, parse_mode=None):
-    import json
-    params = {"chat_id": chat_id, "text": text}
-    if reply_markup:
-        params["reply_markup"] = json.dumps(reply_markup, ensure_ascii=False)
-    if parse_mode:
-        params["parse_mode"] = parse_mode
-    return api_call("sendMessage", params)
-
-
-def answer_callback(cb_id, text=""):
-    api_call("answerCallbackQuery", {"callback_query_id": cb_id, "text": text})
-
-
-def get_chat_member(chat_id, user_id):
-    data = api_call("getChatMember", {"chat_id": chat_id, "user_id": user_id})
-    if data and data.get("ok"):
-        return data["result"]
-    return None
-
-
-# ---------------- PERMISSION CHECK ----------------
-def is_admin(message):
-    chat_type = message["chat"]["type"]
-    user = message["from"]
-
-    if chat_type == "private":
+    if chat.type not in ("group", "supergroup"):
+        # प्राइवेट चैट में सबको allow
         return True
 
-    member = get_chat_member(message["chat"]["id"], user["id"])
-    return member and member["status"] in ("administrator", "creator")
+    member = await context.bot.get_chat_member(chat.id, user.id)
+    return member.status in ("administrator", "creator")
 
 
-def teacher_allowed(message):
-    chat_type = message["chat"]["type"]
-    if chat_type == "private":
-        return True
-    return is_admin(message)
-
-
-# ---------------- BASIC COMMANDS ----------------
-def start_command(message):
-    chat_id = message["chat"]["id"]
-    text = (
-        "नमस्ते! 👋\n"
-        "मैं Mauryan Quiz Bot हूँ.\n\n"
-        "🔹 Student commands:\n"
-        "• /quiz short – 5 सवाल का छोटा क्विज़\n"
-        "• /quiz full – बड़ा टेस्ट (max 25 सवाल)\n"
-        "• /leaderboard – इस group का स्कोर\n\n"
-        "🔹 Teacher/Admin commands:\n"
-        "• /addq प्रश्न | A | B | C | D | सही (1-4) | व्याख्या\n"
-        "• /bulkadd + कई /addq lines\n"
-        "• /removeq <id>\n"
-        "• /resetboard\n"
-        "• /listq\n"
-    )
-    send_msg(chat_id, text)
-
-
-def parse_quiz_mode(text):
-    parts = text.split()
-    if len(parts) > 1:
-        mode = parts[1].lower()
-        if mode in ("short", "full"):
-            return mode
-    return "short"
-
-
-# ---------------- QUIZ START ----------------
-def start_quiz(message):
-    chat_id = message["chat"]["id"]
-    text = message.get("text", "")
-
-    if not is_admin(message):
-        send_msg(chat_id, "केवल admin /quiz चला सकता है।")
-        return
-
-    mode = parse_quiz_mode(text)
-    total_available = len(QUESTIONS)
-
-    if total_available == 0:
-        send_msg(chat_id, "अभी कोई सवाल मौजूद नहीं है। पहले /addq से सवाल जोड़ें।")
-        return
-
-    desired = 25 if mode == "full" else 5
-    count = min(desired, total_available)
-
-    order = list(range(total_available))
-    random.shuffle(order)
-    order = order[:count]
-
-    group_state[chat_id] = {
-        "order": order,
-        "q_index": 0,
-        "start": time.time(),
-        "answers": {},
-        "user_stats": {},
-    }
-
-    send_msg(
-        chat_id,
-        f"🎯 Quiz शुरू!\nMode: {mode} | Questions: {count}\n"
-        f"Time: {QUESTION_TIME}s | Correct: {MARK_CORRECT} | Wrong: {MARK_WRONG}\n"
-        " आपका detailed result private chat में आएगा।"
-    )
-
-    send_question(chat_id)
-
-
-def send_question(chat_id):
-    st = group_state.get(chat_id)
-    if not st:
-        return
-
-    order = st["order"]
-    q_idx = st["q_index"]
-
-    if q_idx >= len(order):
-        return
-
-    q = QUESTIONS[order[q_idx]]
+# ---------- SEND ONE QUESTION ----------
+async def send_question(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, q_index: int
+):
+    question_data = QUESTIONS[q_index]
+    context.user_data["q_index"] = q_index
 
     buttons = [
-        [{"text": opt, "callback_data": f"ans_{i}"}]
-        for i, opt in enumerate(q["options"])
+        [InlineKeyboardButton(text=opt, callback_data=f"answer_{i}")]
+        for i, opt in enumerate(question_data["options"])
     ]
+    markup = InlineKeyboardMarkup(buttons)
 
-    text = f"📝 सवाल {q_idx+1}/{len(order)} (⏱ {QUESTION_TIME}s)\n\n{q['question']}"
+    text = question_data["question"]
 
-    send_msg(chat_id, text, reply_markup={"inline_keyboard": buttons})
-    st["start"] = time.time()
-    st["answers"] = {}
-
-
-def timeout_check():
-    now = time.time()
-    for chat_id, st in list(group_state.items()):
-        if now - st.get("start", now) >= QUESTION_TIME:
-            finish_question(chat_id)
-
-
-def finish_question(chat_id):
-    st = group_state.get(chat_id)
-    if not st:
-        return
-
-    order = st["order"]
-    q_idx = st["q_index"]
-
-    q = QUESTIONS[order[q_idx]]
-
-    summary = (
-        "⏰ समय समाप्त!\n"
-        f"✅ सही उत्तर: {q['options'][q['correct']]}\n\n"
-        f"ℹ️ व्याख्या:\n{q['explanation']}"
-    )
-    send_msg(chat_id, summary)
-
-    st["q_index"] += 1
-
-    if st["q_index"] < len(order):
-        send_question(chat_id)
+    if update.callback_query:
+        await update.callback_query.message.reply_text(text=text, reply_markup=markup)
     else:
-        send_msg(chat_id, "🎉 Quiz समाप्त! Leaderboard आ रहा है…")
-        send_user_summaries(chat_id)
-        send_leaderboard(chat_id)
-        group_state.pop(chat_id, None)
+        await update.message.reply_text(text=text, reply_markup=markup)
 
 
-# ---------------- ANSWER HANDLER ----------------
-def handle_answer(cb):
-    user = cb["from"]
-    user_id = user["id"]
-    chat_id = cb["message"]["chat"]["id"]
-    data = cb.get("data")
-    cb_id = cb["id"]
-
-    st = group_state.get(chat_id)
-    if not st:
-        answer_callback(cb_id, "अभी कोई quiz active नहीं है।")
-        return
-
-    if time.time() - st["start"] > QUESTION_TIME:
-        answer_callback(cb_id, "Time over!")
-        finish_question(chat_id)
-        return
-
-    if user_id in st["answers"]:
-        answer_callback(cb_id, "You already answered!")
-        return
-
-    selected = int(data.split("_")[1])
-
-    q = QUESTIONS[st["order"][st["q_index"]]]
-    correct = q["correct"]
-    is_right = selected == correct
-
-    stats = st["user_stats"].setdefault(user_id, {"correct": 0, "wrong": 0, "attempted": 0})
-    stats["attempted"] += 1
-    if is_right:
-        stats["correct"] += 1
-    else:
-        stats["wrong"] += 1
-
-    board = leaderboard.setdefault(chat_id, {})
-    name = user.get("first_name", "") + " " + user.get("last_name", "")
-    name = name.strip() or user.get("username") or str(user_id)
-
-    udata = board.get(user_id, {"name": name, "score": 0})
-    udata["score"] += MARK_CORRECT if is_right else MARK_WRONG
-    board[user_id] = udata
-
-    st["answers"][user_id] = True
-
-    feedback = (
-        f"सवाल: {q['question']}\n"
-        f"आपका जवाब: {q['options'][selected]}\n"
-        f"{'✔ सही' if is_right else '❌ गलत'}\n\n"
-        f"व्याख्या:\n{q['explanation']}"
+# ---------- /start ----------
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "नमस्ते! 👋\n"
+        "मैं Mauryan Empire MCQ Quiz Bot हूँ.\n\n"
+        "▶ प्राइवेट चैट में: /quiz भेजकर क्विज़ शुरू करें\n"
+        "▶ ग्रुप में: केवल *admin* /quiz चला सकता है\n\n"
+        "Commands:\n"
+        "• /quiz – पूरा MCQ क्विज़\n"
+        "• /leaderboard – टॉप स्कोर\n"
+        "• /daily_on – रोज़ एक सवाल (chat के लिए)\n"
+        "• /daily_off – daily quiz बंद\n"
     )
-    send_msg(user_id, feedback)
-    answer_callback(cb_id, "जवाब दर्ज किया गया!")
 
 
-# ---------------- SUMMARY + LEADERBOARD ----------------
-def send_user_summaries(chat_id):
-    st = group_state.get(chat_id)
-    if not st:
+# ---------- QUIZ START ( /quiz ) ----------
+async def quiz_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # admin check (group में)
+    if not await is_admin(update, context):
+        await update.message.reply_text("केवल *admin* /quiz चला सकता है।", parse_mode="Markdown")
         return
 
-    stats = st["user_stats"]
-    board = leaderboard.get(chat_id, {})
-    total_q = len(st["order"])
+    # user का अपना score reset
+    context.user_data["score"] = 0
+    context.user_data["q_index"] = 0
 
-    for uid, s in stats.items():
-        correct = s["correct"]
-        wrong = s["wrong"]
-        attempted = s["attempted"]
-        skipped = total_q - attempted
-        score = board.get(uid, {}).get("score", 0.0)
+    await update.message.reply_text(
+        "🎯 Mauryan Empire MCQ Quiz शुरू!\n"
+        "हर सवाल के सही विकल्प पर क्लिक करें।"
+    )
 
-        msg = (
-            "📊 आपकी Summary:\n\n"
-            f"कुल: {total_q}\n"
-            f"सही: {correct}\n"
-            f"गलत: {wrong}\n"
-            f"छोड़े: {skipped}\n"
-            f"Final Score: {score:.2f}"
-        )
-        send_msg(uid, msg)
+    await send_question(update, context, 0)
 
 
-def send_leaderboard(chat_id):
-    board = leaderboard.get(chat_id, {})
-    if not board:
-        send_msg(chat_id, "अभी कोई स्कोर नहीं है।")
-        return
+# ---------- HANDLE ANSWER (inline buttons) ----------
+async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
 
-    sorted_board = sorted(board.items(), key=lambda x: x[1]["score"], reverse=True)
+    selected = int(query.data.split("_")[1])
+    q_index = context.user_data.get("q_index", 0)
 
-    text = "🏆 *Leaderboard*\n\n"
-    for rank, (uid, data) in enumerate(sorted_board, 1):
-        text += f"{rank}. {data['name']} — {data['score']:.2f}\n"
+    question = QUESTIONS[q_index]
 
-    send_msg(chat_id, text, parse_mode="Markdown")
-
-
-# ---------------- TEACHER COMMANDS ----------------
-
-def handle_addq(message):
-    if not teacher_allowed(message):
-        send_msg(message["chat"]["id"], "आपको अनुमति नहीं है।")
-        return
-
-    text = message["text"][len("/addq"):].strip()
-    parts = [p.strip() for p in text.split("|")]
-
-    if len(parts) < 7:
-        send_msg(message["chat"]["id"], "फॉर्मेट गलत है!")
-        return
-
-    q, A, B, C, D, corr, exp = parts[:7]
-
-    corr = int(corr)
-    if corr not in (1, 2, 3, 4):
-        send_msg(message["chat"]["id"], "सही विकल्प 1-4 में होना चाहिए।")
-        return
-
-    QUESTIONS.append({
-        "question": q,
-        "options": [A, B, C, D],
-        "correct": corr - 1,
-        "explanation": exp,
-    })
-
-    send_msg(message["chat"]["id"], f"सवाल जोड़ दिया गया! (ID: {len(QUESTIONS)})")
-
-
-def handle_bulkadd(message):
-    if not teacher_allowed(message):
-        send_msg(message["chat"]["id"], "अनुमति नहीं है।")
-        return
-
-    lines = message["text"].splitlines()[1:]
-    added = 0
-
-    for line in lines:
-        if not line.strip():
-            continue
-        if line.startswith("/addq"):
-            line = line[5:].strip()
-        parts = [p.strip() for p in line.split("|")]
-        if len(parts) < 7:
-            continue
-        q, A, B, C, D, corr, exp = parts[:7]
-        corr = int(corr)
-        if corr not in (1, 2, 3, 4):
-            continue
-
-        QUESTIONS.append({
-            "question": q,
-            "options": [A, B, C, D],
-            "correct": corr - 1,
-            "explanation": exp,
-        })
-        added += 1
-
-    send_msg(message["chat"]["id"], f"{added} सवाल जोड़े गए।")
-
-
-def handle_removeq(message):
-    if not teacher_allowed(message):
-        send_msg(message["chat"]["id"], "अनुमति नहीं है।")
-        return
-
-    parts = message["text"].split()
-    if len(parts) < 2:
-        send_msg(message["chat"]["id"], "Usage: /removeq <id>")
-        return
-
-    qid = int(parts[1]) - 1
-    if qid < 0 or qid >= len(QUESTIONS):
-        send_msg(message["chat"]["id"], "ID गलत है।")
-        return
-
-    removed = QUESTIONS.pop(qid)
-    send_msg(message["chat"]["id"], f"सवाल हटाया गया: {removed['question']}")
-
-
-def handle_resetboard(message):
-    if not teacher_allowed(message):
-        send_msg(message["chat"]["id"], "अनुमति नहीं है।")
-        return
-
-    leaderboard.pop(message["chat"]["id"], None)
-    send_msg(message["chat"]["id"], "Leaderboard reset कर दिया गया।")
-
-
-def handle_listq(message):
-    if not teacher_allowed(message):
-        send_msg(message["chat"]["id"], "अनुमति नहीं है।")
-        return
-
-    if not QUESTIONS:
-        send_msg(message["chat"]["id"], "अभी कोई सवाल नहीं है।")
-        return
-
-    msg = ""
-    for i, q in enumerate(QUESTIONS, start=1):
-        msg += f"{i}. {q['question']}\n"
-        if len(msg) > 3500:
-            send_msg(message["chat"]["id"], msg)
-            msg = ""
-
-    if msg:
-        send_msg(message["chat"]["id"], msg)
-
-
-# ---------------- UPDATE DISPATCH ----------------
-def process_update(upd):
-    timeout_check()
-
-    if "message" in upd:
-        msg = upd["message"]
-        text = msg.get("text", "")
-
-        if text.startswith("/start"):
-            start_command(msg)
-        elif text.startswith("/quiz"):
-            start_quiz(msg)
-        elif text.startswith("/leaderboard"):
-            send_leaderboard(msg["chat"]["id"])
-        elif text.startswith("/addq"):
-            handle_addq(msg)
-        elif text.startswith("/bulkadd"):
-            handle_bulkadd(msg)
-        elif text.startswith("/removeq"):
-            handle_removeq(msg)
-        elif text.startswith("/resetboard"):
-            handle_resetboard(msg)
-        elif text.startswith("/listq"):
-            handle_listq(msg)
-
-    if "callback_query" in upd:
-        handle_answer(upd["callback_query"])
-
-
-# ---------------- FLASK APP ----------------
-app = Flask(__name__)
-
-@app.route("/", methods=["GET"])
-def index():
-    return "Mauryan Quiz Bot is running."
-
-
-@app.route(f"/webhook/{BOT_TOKEN}", methods=["POST"])
-def telegram_webhook():
+    # correct letter -> index
+    letters = ["A", "B", "C", "D"]
+    correct_letter = question["correct"].upper().strip()
     try:
-        upd = request.get_json(force=True, silent=True) or {}
-        process_update(upd)
-    except Exception as e:
-        log.exception("Webhook error: %s", e)
-    return "ok"
+        correct_index = letters.index(correct_letter)
+    except ValueError:
+        # अगर गलती से wrong data हो
+        correct_index = 0
+
+    # सही/गलत चेक
+    if selected == correct_index:
+        context.user_data["score"] = context.user_data.get("score", 0) + 1
+        feedback = "✅ सही जवाब!"
+    else:
+        feedback = f"❌ गलत.\nसही जवाब: {question['options'][correct_index]}"
+
+    await query.message.reply_text(feedback)
+
+    # explanation
+    explanation = question.get("explanation")
+    if explanation:
+        await query.message.reply_text(f"ℹ️ व्याख्या:\n{explanation}")
+
+    # अगला question या finish
+    next_q = q_index + 1
+    if next_q < len(QUESTIONS):
+        await send_question(update, context, next_q)
+    else:
+        score = context.user_data.get("score", 0)
+        total = len(QUESTIONS)
+
+        # LEADERBOARD update
+        app_data = context.application.bot_data.setdefault("leaderboard", {})
+        chat_id = update.effective_chat.id
+        chat_board = app_data.setdefault(chat_id, {})
+
+        user = update.effective_user
+        display_name = user.full_name or user.username or str(user.id)
+
+        prev = chat_board.get(user.id)
+        if (not prev) or (score > prev["score"]):
+            chat_board[user.id] = {"score": score, "name": display_name}
+
+        await query.message.reply_text(
+            f"🎉 क्विज़ समाप्त!\nआपका स्कोर: *{score}/{total}*\n"
+            "फिर से शुरू करने के लिए /quiz भेजें।",
+            parse_mode="Markdown",
+        )
+        context.user_data.clear()
+
+
+# ---------- /leaderboard ----------
+async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    app_data = context.application.bot_data.get("leaderboard", {})
+    chat_board = app_data.get(chat_id, {})
+
+    if not chat_board:
+        await update.message.reply_text("अभी तक किसी ने क्विज़ पूरा नहीं किया। 🙂")
+        return
+
+    # high to low sort
+    sorted_scores = sorted(
+        chat_board.items(), key=lambda x: x[1]["score"], reverse=True
+    )
+
+    lines = ["🏆 *Leaderboard*"]
+    for rank, (user_id, data) in enumerate(sorted_scores[:10], start=1):
+        lines.append(f"{rank}. {data['name']} — {data['score']}")
+
+    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+
+
+# ---------- DAILY QUIZ JOB ----------
+async def daily_quiz_job(context: ContextTypes.DEFAULT_TYPE):
+    job_data = context.job.data
+    chat_id = job_data["chat_id"]
+
+    # simple: हमेशा पहला सवाल या random भी कर सकते हैं
+    question_index = 0
+    question = QUESTIONS[question_index]
+
+    buttons = [
+        [InlineKeyboardButton(text=opt, callback_data=f"answer_{i}")]
+        for i, opt in enumerate(question["options"])
+    ]
+    markup = InlineKeyboardMarkup(buttons)
+
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text="📅 Daily Quiz:\n" + question["question"],
+        reply_markup=markup,
+    )
+
+
+# ---------- /daily_on ----------
+async def daily_on(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await is_admin(update, context):
+        await update.message.reply_text("केवल admin daily quiz सेट कर सकता है।")
+        return
+
+    chat_id = update.effective_chat.id
+
+    # पहले से job हो तो हटाओ
+    for job in context.job_queue.get_jobs_by_name(f"daily-{chat_id}"):
+        job.schedule_removal()
+
+    # रोज़ 24 घंटे पर दोहराने वाला job (अभी जिस समय चालू करोगे वही base रहेगा)
+    context.job_queue.run_repeating(
+        daily_quiz_job,
+        interval=timedelta(days=1),
+        first=5,  # 5 sec बाद पहला सवाल
+        name=f"daily-{chat_id}",
+        data={"chat_id": chat_id},
+    )
+
+    await update.message.reply_text("✅ इस चैट के लिए daily quiz चालू कर दिया गया है।")
+
+
+# ---------- /daily_off ----------
+async def daily_off(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await is_admin(update, context):
+        await update.message.reply_text("केवल admin daily quiz बंद कर सकता है।")
+        return
+
+    chat_id = update.effective_chat.id
+    jobs = context.job_queue.get_jobs_by_name(f"daily-{chat_id}")
+    for job in jobs:
+        job.schedule_removal()
+
+    if jobs:
+        await update.message.reply_text("⛔ Daily quiz बंद कर दिया गया है।")
+    else:
+        await update.message.reply_text("इस चैट के लिए कोई daily quiz सेट नहीं था।")
+
+
+# ---------- MAIN ----------
+def main():
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("quiz", quiz_command))
+    app.add_handler(CommandHandler("leaderboard", leaderboard))
+    app.add_handler(CommandHandler("daily_on", daily_on))
+    app.add_handler(CommandHandler("daily_off", daily_off))
+
+    app.add_handler(CallbackQueryHandler(handle_answer, pattern=r"^answer_"))
+
+    app.run_polling()
 
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    main()
