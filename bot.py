@@ -8,7 +8,7 @@ from flask import Flask, request
 
 # ---------------- CONFIG ----------------
 # Bot token अब env से लो (Render में Environment Variable सेट करना बेहतर है)
-BOT_TOKEN = os.getenv("7688080597:AAGdZu38mxpqbBH3fWx_c3hspdPwjiiZKug")   # <-- Render dashboard में BOT_TOKEN सेट करो
+BOT_TOKEN = BOT_TOKEN = os.environ["7688080597:AAGdZu38mxpqbBH3fWx_c3hspdPwjiiZKug"]  # <-- Render dashboard में BOT_TOKEN सेट करो
 API_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
 QUESTION_TIME = 45   # हर सवाल के लिए समय (seconds)
@@ -616,3 +616,4 @@ if __name__ == "__main__":
     # Render PORT env variable
     port = int(os.getenv("PORT", 8000))
     app.run(host="0.0.0.0", port=port)
+
